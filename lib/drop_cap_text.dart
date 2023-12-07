@@ -1,9 +1,8 @@
 import 'dart:math';
 import 'dart:ui';
 
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 
 enum DropCapMode {
   /// default
@@ -30,9 +29,7 @@ class DropCap extends StatelessWidget {
     required this.child,
     required this.width,
     required this.height,
-  })   : assert(width != null),
-        assert(height != null),
-        super(key: key);
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -40,10 +37,10 @@ class DropCap extends StatelessWidget {
   }
 }
 
-class DropCapText extends StatelessWidget {
+class DropCapText extends StatefulWidget {
   final String data;
   final DropCapMode mode;
-  final TextStyle? style, dropCapStyle;
+  final TextStyle? style, dropCapStyle, readMoreStyle;
   final TextAlign textAlign;
   final DropCap? dropCap;
   final EdgeInsets dropCapPadding;
@@ -54,6 +51,8 @@ class DropCapText extends StatelessWidget {
   final int dropCapChars;
   final int? maxLines;
   final TextOverflow overflow;
+  final bool readMore;
+  final int breakingLength;
 
   DropCapText(this.data,
       {Key? key,
@@ -70,20 +69,29 @@ class DropCapText extends StatelessWidget {
       this.textDirection = TextDirection.ltr,
       this.overflow = TextOverflow.clip,
       this.maxLines,
-      this.dropCapPosition})
-      : assert(data != null),
-        super(key: key);
+      this.dropCapPosition,
+      this.readMore = false,
+      this.breakingLength = 150,
+      this.readMoreStyle})
+      : super(key: key);
+
+  @override
+  State<DropCapText> createState() => _DropCapTextState();
+}
+
+class _DropCapTextState extends State<DropCapText> {
+  bool isReadMore = false;
 
   @override
   Widget build(BuildContext context) {
     TextStyle textStyle = TextStyle(
-      color: Theme.of(context).textTheme.bodyText1?.color ?? Colors.black,
+      color: Theme.of(context).textTheme.bodyLarge?.color ?? Colors.black,
       fontSize: 14,
       height: 1,
-      fontFamily: Theme.of(context).textTheme.bodyText1?.fontFamily,
-    ).merge(style);
+      fontFamily: Theme.of(context).textTheme.bodyLarge?.fontFamily,
+    ).merge(widget.style);
 
-    if (data == '') return Text(data, style: textStyle);
+    if (widget.data == '') return Text(widget.data, style: textStyle);
 
     TextStyle capStyle = TextStyle(
       color: textStyle.color,
@@ -92,73 +100,85 @@ class DropCapText extends StatelessWidget {
       fontWeight: textStyle.fontWeight,
       fontStyle: textStyle.fontStyle,
       height: 1,
-    ).merge(dropCapStyle);
+    ).merge(widget.dropCapStyle);
 
     double capWidth, capHeight;
-    int dropCapChars = dropCap != null ? 0 : this.dropCapChars;
+    int dropCapChars = widget.dropCap != null ? 0 : this.widget.dropCapChars;
     CrossAxisAlignment sideCrossAxisAlignment = CrossAxisAlignment.start;
-    MarkdownParser? mdData = parseInlineMarkdown ? MarkdownParser(data) : null;
-    final String dropCapStr = (mdData?.plainText ?? data).substring(0, dropCapChars);
+    MarkdownParser? mdData =
+        widget.parseInlineMarkdown ? MarkdownParser(widget.data) : null;
+    final String dropCapStr =
+        (mdData?.plainText ?? widget.data).substring(0, dropCapChars);
 
-    if (mode == DropCapMode.baseline && dropCap == null) return _buildBaseline(context, textStyle, capStyle);
+    if (widget.mode == DropCapMode.baseline && widget.dropCap == null)
+      return _buildBaseline(context, textStyle, capStyle);
 
     // custom DropCap
-    if (dropCap != null) {
-      capWidth = dropCap!.width;
-      capHeight = dropCap!.height;
+    if (widget.dropCap != null) {
+      capWidth = widget.dropCap!.width;
+      capHeight = widget.dropCap!.height;
     } else {
       TextPainter capPainter = TextPainter(
         text: TextSpan(
           text: dropCapStr,
           style: capStyle,
         ),
-        textDirection: textDirection,
+        textDirection: widget.textDirection,
       );
       capPainter.layout();
       capWidth = capPainter.width;
       capHeight = capPainter.height;
-      if (forceNoDescent) {
+      if (widget.forceNoDescent) {
         List<LineMetrics> ls = capPainter.computeLineMetrics();
-        capHeight -= ls.isNotEmpty ? ls[0].descent * 0.95 : capPainter.height * 0.2;
+        capHeight -=
+            ls.isNotEmpty ? ls[0].descent * 0.95 : capPainter.height * 0.2;
       }
     }
 
     // compute drop cap padding
-    capWidth += dropCapPadding.left + dropCapPadding.right;
-    capHeight += dropCapPadding.top + dropCapPadding.bottom;
+    capWidth += widget.dropCapPadding.left + widget.dropCapPadding.right;
+    capHeight += widget.dropCapPadding.top + widget.dropCapPadding.bottom;
 
-    MarkdownParser? mdRest = parseInlineMarkdown ? mdData!.subchars(dropCapChars) : null;
-    String restData = data.substring(dropCapChars);
+    MarkdownParser? mdRest =
+        widget.parseInlineMarkdown ? mdData!.subchars(dropCapChars) : null;
+    String restData = widget.data.substring(dropCapChars);
 
     TextSpan textSpan = TextSpan(
-      text: parseInlineMarkdown ? null : restData,
-      children: parseInlineMarkdown ? mdRest!.toTextSpanList() : null,
-      style: textStyle.apply(fontSizeFactor: MediaQuery.of(context).textScaleFactor),
+      text: widget.parseInlineMarkdown ? null : restData,
+      children: widget.parseInlineMarkdown ? mdRest!.toTextSpanList() : null,
+      style: textStyle.apply(
+          fontSizeFactor:
+              MediaQuery.of(context).textScaler.scale(textStyle.fontSize!)),
     );
 
-    TextPainter textPainter = TextPainter(textDirection: textDirection, text: textSpan, textAlign: textAlign);
+    TextPainter textPainter = TextPainter(
+        textDirection: widget.textDirection,
+        text: textSpan,
+        textAlign: widget.textAlign);
     double lineHeight = textPainter.preferredLineHeight;
 
-    int rows = ((capHeight - indentation.dy) / lineHeight).ceil();
+    int rows = ((capHeight - widget.indentation.dy) / lineHeight).ceil();
 
     // DROP CAP MODE - UPWARDS
-    if (mode == DropCapMode.upwards) {
+    if (widget.mode == DropCapMode.upwards) {
       rows = 1;
       sideCrossAxisAlignment = CrossAxisAlignment.end;
     }
 
     // BUILDER
-    return LayoutBuilder(builder: (BuildContext context, BoxConstraints constraints) {
+    return LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
       double boundsWidth = constraints.maxWidth - capWidth;
       if (boundsWidth < 1) boundsWidth = 1;
 
-      int charIndexEnd = data.length;
+      int charIndexEnd = widget.data.length;
 
       //int startMillis = new DateTime.now().millisecondsSinceEpoch;
       if (rows > 0) {
         textPainter.layout(maxWidth: boundsWidth);
         double yPos = rows * lineHeight;
-        int charIndex = textPainter.getPositionForOffset(Offset(0, yPos)).offset;
+        int charIndex =
+            textPainter.getPositionForOffset(Offset(0, yPos)).offset;
         textPainter.maxLines = rows;
         textPainter.layout(maxWidth: boundsWidth);
         if (textPainter.didExceedMaxLines) charIndexEnd = charIndex;
@@ -168,27 +188,36 @@ class DropCapText extends StatelessWidget {
       //int totMillis = new DateTime.now().millisecondsSinceEpoch - startMillis;
 
       // DROP CAP MODE - LEFT
-      if (mode == DropCapMode.aside) charIndexEnd = data.length;
-
+      if (widget.mode == DropCapMode.aside) charIndexEnd = widget.data.length;
+      // print("restData.length ${restData.length}");
+      // print("charIndexEnd $charIndexEnd");
+      // print("widget.data ${widget.data.length}");
+      String restEndData =
+          restData.substring(min(charIndexEnd, restData.length));
+      // print("widget.restData.char: ${restEndData} : ${restEndData.length}");
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           // Text(totMillis.toString() + ' ms'),
           Row(
-            textDirection: dropCapPosition == null || dropCapPosition == DropCapPosition.start
-                ? textDirection
-                : (textDirection == TextDirection.ltr ? TextDirection.rtl : TextDirection.ltr),
+            textDirection: widget.dropCapPosition == null ||
+                    widget.dropCapPosition == DropCapPosition.start
+                ? widget.textDirection
+                : (widget.textDirection == TextDirection.ltr
+                    ? TextDirection.rtl
+                    : TextDirection.ltr),
             crossAxisAlignment: sideCrossAxisAlignment,
             children: <Widget>[
-              dropCap != null
-                  ? Padding(padding: dropCapPadding, child: dropCap)
+              widget.dropCap != null
+                  ? Padding(
+                      padding: widget.dropCapPadding, child: widget.dropCap)
                   : Container(
                       width: capWidth,
                       height: capHeight,
-                      padding: dropCapPadding,
+                      padding: widget.dropCapPadding,
                       child: RichText(
-                        textDirection: textDirection,
-                        textAlign: textAlign,
+                        textDirection: widget.textDirection,
+                        textAlign: widget.textAlign,
                         text: TextSpan(
                           text: dropCapStr,
                           style: capStyle,
@@ -197,58 +226,135 @@ class DropCapText extends StatelessWidget {
                     ),
               Flexible(
                 child: Container(
-                  padding: EdgeInsets.only(top: indentation.dy),
+                  padding: EdgeInsets.only(top: widget.indentation.dy),
                   width: boundsWidth,
-                  height:
-                      mode != DropCapMode.aside ? (lineHeight * min(maxLines ?? rows, rows)) + indentation.dy : null,
+                  height: widget.mode != DropCapMode.aside
+                      ? (lineHeight * min(widget.maxLines ?? rows, rows)) +
+                          widget.indentation.dy
+                      : null,
                   child: RichText(
-                    overflow: (maxLines == null || (maxLines! > rows && overflow == TextOverflow.fade))
+                    overflow: (widget.maxLines == null ||
+                            (widget.maxLines! > rows &&
+                                widget.overflow == TextOverflow.fade))
                         ? TextOverflow.clip
-                        : overflow,
-                    maxLines: maxLines,
-                    textDirection: textDirection,
-                    textAlign: textAlign,
+                        : widget.overflow,
+                    maxLines: widget.maxLines,
+                    textDirection: widget.textDirection,
+                    textAlign: widget.textAlign,
                     text: textSpan,
                   ),
                 ),
               ),
             ],
           ),
-          if (maxLines == null || maxLines! > rows)
-            Padding(
-              padding: EdgeInsets.only(left: indentation.dx),
-              child: RichText(
-                overflow: overflow,
-                maxLines: maxLines != null && maxLines! > rows ? maxLines! - rows : null,
-                textAlign: textAlign,
-                textDirection: textDirection,
-                text: TextSpan(
-                  text: parseInlineMarkdown ? null : restData.substring(min(charIndexEnd, restData.length)),
-                  children: parseInlineMarkdown ? mdRest!.subchars(charIndexEnd).toTextSpanList() : null,
-                  style: textStyle.apply(fontSizeFactor: MediaQuery.of(context).textScaleFactor),
+          if ((widget.maxLines == null || widget.maxLines! > rows) &&
+              restEndData.length > 0)
+            if (!widget.readMore)
+              Padding(
+                padding: EdgeInsets.only(left: widget.indentation.dx),
+                child: RichText(
+                  overflow: widget.overflow,
+                  maxLines: widget.maxLines != null && widget.maxLines! > rows
+                      ? widget.maxLines! - rows
+                      : null,
+                  textAlign: widget.textAlign,
+                  textDirection: widget.textDirection,
+                  text: TextSpan(
+                    text: widget.parseInlineMarkdown ? null : restEndData,
+                    children: widget.parseInlineMarkdown
+                        ? mdRest!.subchars(charIndexEnd).toTextSpanList()
+                        : null,
+                    style: textStyle.apply(
+                        fontSizeFactor: MediaQuery.of(context).textScaler.scale(textStyle.fontSize!)),
+                  ),
+                ),
+              )
+            else
+              Padding(
+                padding: EdgeInsets.only(left: widget.indentation.dx),
+                child: RichText(
+                  overflow: widget.overflow,
+                  maxLines: widget.maxLines != null && widget.maxLines! > rows
+                      ? widget.maxLines! - rows
+                      : null,
+                  textAlign: widget.textAlign,
+                  textDirection: widget.textDirection,
+                  text: TextSpan(
+                    style:
+                        widget.style ?? Theme.of(context).textTheme.bodyMedium!,
+                    children: [
+                      isReadMore
+                          ? TextSpan(
+                              text: widget.parseInlineMarkdown
+                                  ? null
+                                  : restEndData,
+                              style: widget.style ??
+                                  Theme.of(context).textTheme.bodyMedium!)
+                          : restData.length > widget.breakingLength
+                              ? TextSpan(
+                                  text: widget.parseInlineMarkdown
+                                      ? null
+                                      : restData
+                                          .substring(min(
+                                              charIndexEnd, restData.length))
+                                          .substring(
+                                              0,
+                                              restData.length >
+                                                      widget.breakingLength
+                                                  ? widget.breakingLength
+                                                  : restData.length),
+                                  style: widget.style ??
+                                      Theme.of(context).textTheme.bodyMedium!)
+                              : TextSpan(
+                                  text: widget.parseInlineMarkdown
+                                      ? null
+                                      : restEndData,
+                                  style: widget.style ??
+                                      Theme.of(context).textTheme.bodyMedium!),
+                      if (!isReadMore &&
+                          restData.length > widget.breakingLength)
+                        TextSpan(
+                            text: "...",
+                            style: widget.style ??
+                                Theme.of(context).textTheme.bodyMedium),
+                      if (restData.length > widget.breakingLength)
+                        TextSpan(
+                          text: isReadMore ? " Read Less" : " Read More",
+                          style: widget.readMoreStyle ??
+                              textStyle.apply(
+                                  fontSizeFactor:
+                                      MediaQuery.of(context).textScaler.scale(textStyle.fontSize!)),
+                          recognizer: TapGestureRecognizer()
+                            ..onTap = () {
+                              setState(() => isReadMore = !isReadMore);
+                            },
+                        ),
+                    ],
+                  ),
                 ),
               ),
-            ),
         ],
       );
     });
   }
 
-  _buildBaseline(BuildContext context, TextStyle textStyle, TextStyle capStyle) {
-    MarkdownParser mdData = MarkdownParser(data);
+  _buildBaseline(
+      BuildContext context, TextStyle textStyle, TextStyle capStyle) {
+    MarkdownParser mdData = MarkdownParser(widget.data);
 
     return RichText(
-      textAlign: textAlign,
+      textAlign: widget.textAlign,
       text: TextSpan(
         style: textStyle,
         children: <TextSpan>[
           TextSpan(
-            text: mdData.plainText.substring(0, dropCapChars),
+            text: mdData.plainText.substring(0, widget.dropCapChars),
             style: capStyle.merge(TextStyle(height: 0)),
           ),
           TextSpan(
-            children: mdData.subchars(dropCapChars).toTextSpanList(),
-            style: textStyle.apply(fontSizeFactor: MediaQuery.of(context).textScaleFactor),
+            children: mdData.subchars(widget.dropCapChars).toTextSpanList(),
+            style: textStyle.apply(
+                fontSizeFactor: MediaQuery.of(context).textScaler.scale(textStyle.fontSize!)),
           ),
         ],
       ),
@@ -317,8 +423,10 @@ class MarkdownParser {
       final List<Markup> markups = [Markup(markup, isOpening)];
 
       if (bold && markup != MARKUP_BOLD) markups.add(Markup(MARKUP_BOLD, true));
-      if (italic && markup != MARKUP_ITALIC) markups.add(Markup(MARKUP_ITALIC, true));
-      if (underline && markup != MARKUP_UNDERLINE) markups.add(Markup(MARKUP_UNDERLINE, true));
+      if (italic && markup != MARKUP_ITALIC)
+        markups.add(Markup(MARKUP_ITALIC, true));
+      if (underline && markup != MARKUP_UNDERLINE)
+        markups.add(Markup(MARKUP_UNDERLINE, true));
 
       spans.add(
         MarkdownSpan(

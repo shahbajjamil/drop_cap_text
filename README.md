@@ -38,7 +38,10 @@ DropCapText(
 | dropCapPosition     | DropCapPosition    | DropCapPosition.start   |                    |
 | textDirection       | TextDirection      | TextDirection.ltr       |                    |
 | maxLines            | int                |                         |                    |
-| overflow            | TextOverflow       | TextOverflow.clip       |                    |
+| overflow             | TextOverflow       | TextOverflow.clip       |                    |
+| readmore            | bool             | false                     |                    |
+| breakingLength      | int                | 150                     |                    |
+| readMorestyle       | TextStyle          | null                    |                    |
 
 
 
